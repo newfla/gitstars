@@ -1,4 +1,5 @@
 use crate::{Fetcher, Result};
+use async_trait::async_trait;
 use bon::Builder;
 use gitlab::{
     GitlabBuilder,
@@ -21,8 +22,9 @@ pub struct GitLabFetcher {
     repo: String,
 }
 
+#[async_trait]
 impl Fetcher for GitLabFetcher {
-    async fn get_stars(&self) -> Result<u32> {
+    async fn stars(&self) -> Result<u32> {
         let client = GitlabBuilder::new_unauthenticated(GITLAB_URL)
             .build_async()
             .await?;
@@ -41,20 +43,18 @@ impl Fetcher for GitLabFetcher {
 }
 
 mod test {
-    
-
     #[tokio::test]
     async fn test() {
         use crate::{Fetcher, fetcher::gitlab::GitLabFetcher};
-        
+
         let repo = GitLabFetcher::builder()
             .owner("gitlab-org")
             .repo("gitlab")
             .build();
 
-        let stars = repo.get_stars().await;
+        let stars = repo.stars().await;
         let name = repo.project();
-        
+
         assert_eq!(name, "gitlab-org/gitlab");
         assert!(stars.is_ok())
     }
