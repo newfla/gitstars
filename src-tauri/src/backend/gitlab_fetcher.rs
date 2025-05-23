@@ -1,4 +1,4 @@
-use crate::{Fetcher, Result};
+use crate::backend::{Fetcher, Result};
 use async_trait::async_trait;
 use bon::Builder;
 use gitlab::{
@@ -45,7 +45,7 @@ impl Fetcher for GitLabFetcher {
 mod test {
     #[tokio::test]
     async fn test() {
-        use crate::{Fetcher, fetcher::gitlab::GitLabFetcher};
+        use crate::{Fetcher, backend::gitlab_fetcher::GitLabFetcher};
 
         let repo = GitLabFetcher::builder()
             .owner("gitlab-org")

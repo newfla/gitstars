@@ -3,29 +3,53 @@ import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
+interface Ok<T> {
+  Ok: T,
+}
+
+interface Error {
+  Err: string,
+}
+
+type Result<T> = Ok<T> | Error
+
 enum GitType{
   GitHub = "GitHub",
   GitLab = "GitLab",
 }
+
 interface Setting {
   git_type: GitType,
   owner: String,
   repo: String,
   order: number,
 }
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
 
-  async function greet() {
+interface Fetched {
+  setting: Setting,
+  stars: number,
+}
+ 
+// First time load data
+const data: Result<Fetched>[] = await invoke("read");
+
+function App() {
+  const [greetMsg, setGreetMsg] = useState(0);
+  const [owner, setOwner] = useState("");
+  const [repo, setRepo] = useState("");
+
+  const [settings, setSettings] = useState(data);
+
+  async function add() {
     // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    let which: Setting = {
+    let setting: Setting = {
       git_type: GitType.GitHub,
-      owner: "newfla",
-      repo: "diffusion-rs",
+      owner: owner,
+      repo: repo,
       order: 0
     }
-    setGreetMsg(await invoke("set_current", { which }));
+    setGreetMsg(await invoke("create", { setting }));
+    await invoke("set_current", { setting });
   }
 
   return (
@@ -49,13 +73,18 @@ function App() {
         className="row"
         onSubmit={(e) => {
           e.preventDefault();
-          greet();
+          add();
         }}
       >
         <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
+          id="owner-input"
+          onChange={(e) => setOwner(e.currentTarget.value)}
+          placeholder="Enter a owner..."
+        />
+        <input
+          id="repo-input"
+          onChange={(e) => setRepo(e.currentTarget.value)}
+          placeholder="Enter a repo..."
         />
         <button type="submit">Greet</button>
       </form>

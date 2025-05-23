@@ -34,4 +34,5 @@ octocrab = "0.44.1"
 thiserror = "2.0.12"
 tokio = {version = "1.45.0", features = ["full"] }
 getset = "0.1.5"
+unit-prefix = "0.5.1"
 

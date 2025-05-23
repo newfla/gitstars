@@ -1,4 +1,4 @@
-use crate::{Fetcher, Result};
+use crate::backend::{Fetcher, Result};
 use async_trait::async_trait;
 use bon::Builder;
 
@@ -26,7 +26,7 @@ impl Fetcher for GitHubFetcher {
 mod test {
     #[tokio::test]
     async fn test() {
-        use crate::{Fetcher, fetcher::github::GitHubFetcher};
+        use crate::{Fetcher, backend::github_fetcher::GitHubFetcher};
 
         let repo = GitHubFetcher::builder()
             .owner("newfla")

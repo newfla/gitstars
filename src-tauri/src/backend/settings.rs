@@ -1,22 +1,22 @@
-use std::path::Path;
+use std::{collections::HashSet, hash::Hash, path::Path};
 
-use crate::{
+use crate::backend::{
     Error, Fetcher, Result,
-    fetcher::{github::GitHubFetcher, gitlab::GitLabFetcher},
+    {github_fetcher::GitHubFetcher, gitlab_fetcher::GitLabFetcher},
 };
 use bon::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
 use setting_builder::{SetGitType, SetOwner, SetRepo};
-use tokio::fs::{read_to_string, write};
+use tokio::fs::{create_dir_all, read_to_string, write};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum GitType {
     GitHub,
     GitLab,
 }
 
-#[derive(Builder, Clone, Debug, Getters, Serialize, Deserialize)]
+#[derive(Builder, Clone, Debug, Eq, Getters, Serialize, Deserialize)]
 #[get = "pub"]
 pub struct Setting {
     git_type: GitType,
@@ -25,6 +25,32 @@ pub struct Setting {
     #[builder(into)]
     repo: String,
     order: usize,
+}
+
+impl PartialEq for Setting {
+    fn eq(&self, other: &Self) -> bool {
+        self.git_type == other.git_type && self.owner == other.owner && self.repo == other.repo
+    }
+}
+
+impl PartialOrd for Setting {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Setting {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.order.cmp(&other.order)
+    }
+}
+
+impl Hash for Setting {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.git_type.hash(state);
+        self.owner.hash(state);
+        self.repo.hash(state);
+    }
 }
 
 impl From<&Box<dyn Fetcher>> for SettingBuilder<SetRepo<SetOwner<SetGitType>>> {
@@ -68,8 +94,8 @@ impl From<Setting> for Box<dyn Fetcher> {
     }
 }
 
-fn load(data: &str) -> Result<Vec<Setting>, Error> {
-    let settings: Vec<Setting> = serde_json::from_str(data)?;
+fn load(data: &str) -> Result<HashSet<Setting>, Error> {
+    let settings: HashSet<Setting> = serde_json::from_str(data)?;
     Ok(settings)
 }
 
@@ -84,14 +110,14 @@ pub async fn fetchers_from_path(path: &Path) -> Result<Vec<Box<dyn Fetcher>>> {
     load_fetchers(&data)
 }
 
-pub async fn settings_from_path(path: &Path) -> Result<Vec<Setting>, Error> {
+pub async fn settings_from_path(path: &Path) -> Result<HashSet<Setting>> {
     let data = read_to_string(path).await?;
     load(&data)
 }
 
 #[allow(dead_code)]
 pub async fn store_fetchers_to_path(fetchers: &[Box<dyn Fetcher>], path: &Path) -> Result<()> {
-    let settings: Vec<Setting> = fetchers
+    let settings: HashSet<Setting> = fetchers
         .iter()
         .enumerate()
         .map(|(i, s)| {
@@ -103,7 +129,10 @@ pub async fn store_fetchers_to_path(fetchers: &[Box<dyn Fetcher>], path: &Path) 
     store_settings_to_path(&settings, path).await
 }
 
-pub async fn store_settings_to_path(settings: &[Setting], path: &Path) -> Result<()> {
+pub async fn store_settings_to_path(settings: &HashSet<Setting>, path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        create_dir_all(parent).await?;
+    }
     let data = serde_json::to_string_pretty(settings)?;
     write(path, data).await?;
     Ok(())
@@ -112,7 +141,7 @@ pub async fn store_settings_to_path(settings: &[Setting], path: &Path) -> Result
 mod test {
     #[test]
     fn test_load() {
-        use crate::settings::load;
+        use crate::backend::settings::load;
 
         let data = r#"[
             {
@@ -134,12 +163,12 @@ mod test {
 
     #[tokio::test]
     async fn test_store() {
-        use crate::settings::store_fetchers_to_path;
+        use crate::backend::settings::store_fetchers_to_path;
         use tempfile::NamedTempFile;
 
         use crate::Fetcher;
-        use crate::fetcher::github::GitHubFetcher;
-        use crate::fetcher::gitlab::GitLabFetcher;
+        use crate::backend::github_fetcher::GitHubFetcher;
+        use crate::backend::gitlab_fetcher::GitLabFetcher;
 
         let gitlab = GitLabFetcher::builder()
             .owner("gitlab-org")

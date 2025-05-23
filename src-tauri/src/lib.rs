@@ -1,54 +1,38 @@
-use std::sync::{OnceLock, RwLock};
+mod backend;
 
-use fetcher::{github::GitHubFetcher, gitlab::GitLabFetcher};
-use settings::{
-    GitType, Setting, settings_from_path, store_settings_to_path,
+use backend::{
+    Fetcher, Result,
+    github_fetcher::GitHubFetcher,
+    gitlab_fetcher::GitLabFetcher,
+    settings::{GitType, Setting, settings_from_path, store_settings_to_path},
+};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashSet,
+    path::PathBuf,
+    sync::{OnceLock, RwLock},
 };
 use tauri::{
     App, AppHandle, Manager,
     menu::Menu,
     tray::{TrayIconBuilder, TrayIconEvent},
 };
-
-use async_trait::async_trait;
-use downcast_rs::{Downcast, impl_downcast};
-use gitlab::RestError;
-use thiserror::Error;
-use tokio::io;
-
-mod fetcher;
-mod settings;
+use tokio::task::JoinSet;
+use unit_prefix::NumberPrefix;
 
 const TRAY_ID: &str = "tray";
 const WINDOW_ID: &str = "main";
-static SETTINGS: OnceLock<RwLock<Vec<Setting>>> = OnceLock::new();
+const SETTINGS_FILE: &str = "settings.json";
+static SETTINGS: OnceLock<RwLock<HashSet<Setting>>> = OnceLock::new();
 
-pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error(transparent)]
-    GitHub(#[from] octocrab::Error),
-    #[error(transparent)]
-    GitLab(#[from] gitlab::GitlabError),
-    #[error(transparent)]
-    GitLabApi(#[from] gitlab::api::ApiError<RestError>),
-    #[error(transparent)]
-    SerdeJson(#[from] serde_json::Error),
-    #[error(transparent)]
-    Io(#[from] io::Error),
+#[derive(Serialize, Deserialize)]
+pub struct Fetched {
+    stars: u32,
+    setting: Setting,
 }
-
-#[async_trait]
-pub trait Fetcher: Downcast {
-    async fn stars(&self) -> Result<u32>;
-    fn project(&self) -> String;
-}
-
-impl_downcast!(Fetcher);
 
 #[tauri::command]
-async fn fetch(which: Setting) -> Result<(String, u32), ()> {
+async fn fetch(which: Setting) -> Result<(String, u32)> {
     let fetcher: Box<dyn Fetcher + Send> = match which.git_type() {
         GitType::GitHub => Box::new(
             GitHubFetcher::builder()
@@ -63,44 +47,73 @@ async fn fetch(which: Setting) -> Result<(String, u32), ()> {
                 .build(),
         ),
     };
-    Ok((fetcher.project(), fetcher.stars().await.unwrap_or(0)))
+    let project = fetcher.project();
+    let stars = fetcher.stars().await?;
+    Ok((project, stars))
 }
 
 #[tauri::command]
-async fn set_current(app: AppHandle, which: Setting) -> Result<String, ()> {
-    let (project, stars) = fetch(which).await?;
-    let txt = format!("⭐️ {project} - {stars}");
-    let _ = app
-        .tray_by_id(TRAY_ID)
+async fn set_current(app: AppHandle, setting: Setting) -> Result<()> {
+    let repo = setting.repo().clone();
+    let (_, stars) = fetch(setting).await?;
+
+    let stars = match NumberPrefix::decimal(stars as f64) {
+        NumberPrefix::Prefixed(prefix, n) => {
+            format!("{:.0}{}", n, prefix)
+        }
+        _ => format!("{stars}"),
+    };
+
+    let txt = format!("⭐️ {repo} {stars}");
+    let _ = app.tray_by_id(TRAY_ID).unwrap().set_title(Some(txt));
+    Ok(())
+}
+
+#[tauri::command]
+async fn create(app: AppHandle, setting: Setting) -> Result<u32> {
+    SETTINGS
+        .get()
         .unwrap()
-        .set_title(Some(txt.clone()));
-    Ok(format!("Hello, {}! You've been greeted from Rust!", txt))
+        .write()
+        .unwrap()
+        .insert(setting.clone());
+    store(app).await?;
+    fetch(setting).await.map(|(_, stars)| stars)
 }
 
 #[tauri::command]
-async fn add(setting: Setting) -> Result<u32, ()> {
-    SETTINGS.get().unwrap().write().unwrap().push(setting.clone());
-    fetch(setting).await.map(|(_, stars)|stars)
+async fn update(app: AppHandle, setting: Setting) -> Result<()> {
+    SETTINGS.get().unwrap().write().unwrap().replace(setting);
+    store(app).await?;
+    Ok(())
 }
 
 #[tauri::command]
-async fn store(app: AppHandle) -> Result<(), ()> {
-    let settings = SETTINGS.get().unwrap().read().unwrap().clone();
-    let res = store_settings_to_path(&settings, &app.path().local_data_dir().unwrap())
-        .await
-        .map_err(|_| ());
-    res
+async fn delete(app: AppHandle, setting: Setting) -> Result<()> {
+    SETTINGS.get().unwrap().write().unwrap().remove(&setting);
+    store(app).await?;
+    Ok(())
 }
 
 #[tauri::command]
-async fn load(app: AppHandle) -> Vec<Setting> {
+async fn read(app: AppHandle) -> Vec<Result<Fetched, String>> {
     if SETTINGS.get().is_none() {
-        let data = settings_from_path(&app.path().local_data_dir().unwrap())
+        let data = settings_from_path(&settings_file_path(&app))
             .await
             .unwrap_or_default();
         let _ = SETTINGS.set(RwLock::new(data));
     }
-    SETTINGS.get().unwrap().read().unwrap().to_vec()
+    let data = SETTINGS.get().unwrap().read().unwrap().clone();
+    let mut set = JoinSet::new();
+    data.into_iter().for_each(|setting| {
+        set.spawn(async move {
+            let (_, stars) = fetch(setting.clone())
+                .await
+                .map_err(|err| err.to_string())?;
+            Ok(Fetched { stars, setting })
+        });
+    });
+    set.join_all().await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -112,7 +125,14 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![set_current, load, store, fetch, add])
+        .invoke_handler(tauri::generate_handler![
+            set_current,
+            read,
+            fetch,
+            create,
+            update,
+            delete
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -122,7 +142,10 @@ fn build_tray(app: &mut App) -> Result<(), tauri::Error> {
     TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
         .show_menu_on_left_click(true)
-        .title(app.config().product_name.as_ref().unwrap())
+        .title(format!(
+            "⭐️ {}",
+            app.config().product_name.as_ref().unwrap()
+        ))
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click { .. } = event {
                 let app = tray.app_handle();
@@ -140,4 +163,15 @@ fn hide_window(app: &mut App) {
     if let Some(window) = app.get_webview_window(WINDOW_ID) {
         let _ = window.hide();
     }
+}
+
+fn settings_file_path(app: &AppHandle) -> PathBuf {
+    let mut path = app.path().app_local_data_dir().unwrap();
+    path.push(SETTINGS_FILE);
+    path
+}
+
+async fn store(app: AppHandle) -> Result<()> {
+    let settings = SETTINGS.get().unwrap().read().unwrap().clone();
+    store_settings_to_path(&settings, &settings_file_path(&app)).await
 }
