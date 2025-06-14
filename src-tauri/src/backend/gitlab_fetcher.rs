@@ -1,6 +1,5 @@
-use crate::backend::{Fetcher, Result};
-use async_trait::async_trait;
-use bon::Builder;
+use crate::backend::{GitType, Repo, Result};
+use bon::builder;
 use gitlab::{
     GitlabBuilder,
     api::{AsyncQuery, projects},
@@ -14,48 +13,39 @@ struct Project {
     star_count: u32,
 }
 
-#[derive(Builder)]
-pub struct GitLabFetcher {
-    #[builder(into)]
-    owner: String,
-    #[builder(into)]
-    repo: String,
-}
-
-#[async_trait]
-impl Fetcher for GitLabFetcher {
-    async fn stars(&self) -> Result<u32> {
-        let client = GitlabBuilder::new_unauthenticated(GITLAB_URL)
-            .build_async()
-            .await?;
-        let endpoint = projects::Project::builder()
-            .project("gitlab-org/gitlab")
-            .statistics(true)
-            .build()
-            .unwrap();
-        let res: Project = endpoint.query_async(&client).await?;
-        Ok(res.star_count)
+#[builder]
+pub async fn fetcher(repo: &Repo) -> Result<u32> {
+    if repo.git_type != GitType::GitLab {
+        return Err(super::Error::Wrongfetcher(
+            repo.git_type.clone(),
+            GitType::GitLab,
+        ));
     }
 
-    fn project(&self) -> String {
-        format!("{}/{}", self.owner, self.repo)
-    }
+    let client = GitlabBuilder::new_unauthenticated(GITLAB_URL)
+        .build_async()
+        .await?;
+    let endpoint = projects::Project::builder()
+        .project(repo.to_string())
+        .statistics(true)
+        .build()
+        .unwrap();
+    let res: Project = endpoint.query_async(&client).await?;
+    Ok(res.star_count)
 }
 
 mod test {
     #[tokio::test]
     async fn test() {
-        use crate::{Fetcher, backend::gitlab_fetcher::GitLabFetcher};
+        use crate::backend::{Repo, gitlab_fetcher::fetcher};
 
-        let repo = GitLabFetcher::builder()
+        let repo = Repo::builder()
+            .git_type(crate::backend::GitType::GitLab)
             .owner("gitlab-org")
-            .repo("gitlab")
+            .project("gitlab")
             .build();
-
-        let stars = repo.stars().await;
-        let name = repo.project();
-
-        assert_eq!(name, "gitlab-org/gitlab");
+        let stars = fetcher().repo(&repo).call().await;
+        assert_eq!(repo.to_string(), "gitlab-org/gitlab");
         assert!(stars.is_ok())
     }
 }

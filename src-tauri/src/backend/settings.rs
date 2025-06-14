@@ -1,35 +1,23 @@
 use std::{collections::HashSet, hash::Hash, path::Path};
 
-use crate::backend::{
-    Error, Fetcher, Result,
-    {github_fetcher::GitHubFetcher, gitlab_fetcher::GitLabFetcher},
-};
+use crate::backend::{Error, Repo, Result};
 use bon::Builder;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
-use setting_builder::{SetGitType, SetOwner, SetRepo};
 use tokio::fs::{create_dir_all, read_to_string, write};
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub enum GitType {
-    GitHub,
-    GitLab,
-}
+use uuid::Uuid;
 
 #[derive(Builder, Clone, Debug, Eq, Getters, Serialize, Deserialize)]
 #[get = "pub"]
 pub struct Setting {
-    git_type: GitType,
-    #[builder(into)]
-    owner: String,
-    #[builder(into)]
-    repo: String,
+    id: Uuid,
     order: usize,
+    repo: Repo,
 }
 
 impl PartialEq for Setting {
     fn eq(&self, other: &Self) -> bool {
-        self.git_type == other.git_type && self.owner == other.owner && self.repo == other.repo
+        self.id == other.id
     }
 }
 
@@ -47,93 +35,28 @@ impl Ord for Setting {
 
 impl Hash for Setting {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.git_type.hash(state);
-        self.owner.hash(state);
-        self.repo.hash(state);
+        self.id.hash(state);
     }
 }
 
-impl From<&Box<dyn Fetcher>> for SettingBuilder<SetRepo<SetOwner<SetGitType>>> {
-    fn from(value: &Box<dyn Fetcher>) -> Self {
-        if let Some(val) = value.downcast_ref::<GitHubFetcher>() {
-            let project = val.project();
-            let (owner, repo) = project.split_once('/').unwrap();
-            return Setting::builder()
-                .git_type(GitType::GitHub)
-                .owner(owner)
-                .repo(repo);
-        }
-        if let Some(val) = value.downcast_ref::<GitLabFetcher>() {
-            let project = val.project();
-            let (owner, repo) = project.split_once('/').unwrap();
-            return Setting::builder()
-                .git_type(GitType::GitLab)
-                .owner(owner)
-                .repo(repo);
-        }
-        unreachable!()
-    }
-}
-
-impl From<Setting> for Box<dyn Fetcher> {
-    fn from(value: Setting) -> Self {
-        match value.git_type {
-            GitType::GitHub => Box::new(
-                GitHubFetcher::builder()
-                    .owner(value.owner)
-                    .repo(value.repo)
-                    .build(),
-            ),
-            GitType::GitLab => Box::new(
-                GitLabFetcher::builder()
-                    .owner(value.owner)
-                    .repo(value.repo)
-                    .build(),
-            ),
-        }
-    }
-}
-
-fn load(data: &str) -> Result<HashSet<Setting>, Error> {
+fn load_from_str(data: &str) -> Result<HashSet<Setting>, Error> {
     let settings: HashSet<Setting> = serde_json::from_str(data)?;
     Ok(settings)
 }
 
-fn load_fetchers(data: &str) -> Result<Vec<Box<dyn Fetcher>>, Error> {
-    let settings = load(data)?;
-    Ok(settings.into_iter().map(Into::into).collect())
-}
-
-#[allow(dead_code)]
-pub async fn fetchers_from_path(path: &Path) -> Result<Vec<Box<dyn Fetcher>>> {
+pub async fn load(path: &Path) -> Result<HashSet<Setting>> {
     let data = read_to_string(path).await?;
-    load_fetchers(&data)
+    load_from_str(&data)
 }
 
-pub async fn settings_from_path(path: &Path) -> Result<HashSet<Setting>> {
-    let data = read_to_string(path).await?;
-    load(&data)
-}
-
-#[allow(dead_code)]
-pub async fn store_fetchers_to_path(fetchers: &[Box<dyn Fetcher>], path: &Path) -> Result<()> {
-    let settings: HashSet<Setting> = fetchers
-        .iter()
-        .enumerate()
-        .map(|(i, s)| {
-            Into::<SettingBuilder<SetRepo<SetOwner<SetGitType>>>>::into(s)
-                .order(i)
-                .build()
-        })
-        .collect();
-    store_settings_to_path(&settings, path).await
-}
-
-pub async fn store_settings_to_path(settings: &HashSet<Setting>, path: &Path) -> Result<()> {
+pub async fn store<'a, I>(settings: I, path: &Path) -> Result<()>
+where
+    I: IntoIterator<Item = &'a Setting> + Serialize,
+{
     if let Some(parent) = path.parent() {
         create_dir_all(parent).await?;
     }
-    let data = serde_json::to_string_pretty(settings)?;
+    let data = serde_json::to_string_pretty(&settings)?;
     write(path, data).await?;
     Ok(())
 }
@@ -141,51 +64,69 @@ pub async fn store_settings_to_path(settings: &HashSet<Setting>, path: &Path) ->
 mod test {
     #[test]
     fn test_load() {
-        use crate::backend::settings::load;
+        use crate::backend::settings::load_from_str;
 
         let data = r#"[
             {
-                "owner": "newfla",
-                "repo": "diffusion-rs",
-                "git_type": "GitHub",
-                "order": 1
+                "repo": {
+                    "owner": "newfla",
+                    "project": "diffusion-rs",
+                    "git_type": "GitHub"
+                },
+                "order": 1,
+                "id": "3d69bebb-a800-4e6f-b318-1638a27b66c0"
             },
             {
-                "owner": "gitlab-org",
-                "repo": "gitlab",
-                "git_type": "GitLab",
-                "order": 2
+                "repo": {
+                    "owner": "gitlab-org",
+                    "project": "gitlab",
+                    "git_type": "GitLab"
+                },
+                "order": 2,
+                "id": "e70e6ca2-6e06-4f0c-8509-fea0645af5a1"
             }
             ]"#;
-        let fetchers = load(data).unwrap();
+        let fetchers = load_from_str(data).unwrap();
         assert_eq!(2, fetchers.len())
     }
 
     #[tokio::test]
     async fn test_store() {
-        use crate::backend::settings::store_fetchers_to_path;
+        use crate::backend::{
+            Repo,
+            settings::{Setting, store},
+        };
         use tempfile::NamedTempFile;
+        use uuid::Uuid;
 
-        use crate::Fetcher;
-        use crate::backend::github_fetcher::GitHubFetcher;
-        use crate::backend::gitlab_fetcher::GitLabFetcher;
-
-        let gitlab = GitLabFetcher::builder()
+        let gitlab_repo = Repo::builder()
             .owner("gitlab-org")
-            .repo("gitlab")
+            .project("gitlab")
+            .git_type(crate::backend::GitType::GitLab)
             .build();
-        let github = GitHubFetcher::builder()
+        let github_repo = Repo::builder()
             .owner("newfla")
-            .repo("diffusion-rs")
+            .project("diffusion-rs")
+            .git_type(crate::backend::GitType::GitHub)
             .build();
-        let mut data: Vec<Box<dyn Fetcher>> = Vec::new();
-        data.push(Box::new(gitlab));
-        data.push(Box::new(github));
+        let mut data = Vec::new();
+        data.push(
+            Setting::builder()
+                .order(2)
+                .id(Uuid::parse_str("e70e6ca2-6e06-4f0c-8509-fea0645af5a1").unwrap())
+                .repo(gitlab_repo)
+                .build(),
+        );
+        data.push(
+            Setting::builder()
+                .order(1)
+                .id(Uuid::parse_str("3d69bebb-a800-4e6f-b318-1638a27b66c0").unwrap())
+                .repo(github_repo)
+                .build(),
+        );
 
         let temp_file = NamedTempFile::new().unwrap();
 
-        store_fetchers_to_path(&data, temp_file.path())
-            .await
-            .unwrap();
+        store(&data, temp_file.path()).await.unwrap();
     }
 }

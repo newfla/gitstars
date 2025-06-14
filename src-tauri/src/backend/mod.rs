@@ -2,12 +2,47 @@ pub mod github_fetcher;
 pub mod gitlab_fetcher;
 pub mod settings;
 
-use async_trait::async_trait;
-use downcast_rs::{Downcast, impl_downcast};
+use std::fmt::Display;
+
+use bon::Builder;
+use bon::builder;
+use getset::Getters;
 use gitlab::RestError;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use strum_macros::Display;
 use thiserror::Error;
 use tokio::io;
+
+#[derive(Clone, Debug, Display, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub enum GitType {
+    GitHub,
+    GitLab,
+}
+
+#[derive(Builder, Clone, Debug, Eq, PartialEq, Getters, Serialize, Deserialize)]
+#[get = "pub"]
+pub struct Repo {
+    git_type: GitType,
+    #[builder(into)]
+    owner: String,
+    #[builder(into)]
+    project: String,
+}
+
+impl Display for Repo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.owner, self.project)
+    }
+}
+
+impl Repo {
+    pub async fn fetch(&self) -> Result<u32> {
+        match self.git_type() {
+            GitType::GitHub => github_fetcher::fetcher().repo(self).call().await,
+            GitType::GitLab => gitlab_fetcher::fetcher().repo(self).call().await,
+        }
+    }
+}
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -23,6 +58,8 @@ pub enum Error {
     SerdeJson(#[from] serde_json::Error),
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error("Supported host: '{1}'. Get '{0}'")]
+    Wrongfetcher(GitType, GitType),
 }
 
 impl Serialize for Error {
@@ -33,11 +70,3 @@ impl Serialize for Error {
         serializer.serialize_str(self.to_string().as_ref())
     }
 }
-
-#[async_trait]
-pub trait Fetcher: Downcast {
-    async fn stars(&self) -> Result<u32>;
-    fn project(&self) -> String;
-}
-
-impl_downcast!(Fetcher);

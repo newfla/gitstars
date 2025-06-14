@@ -1,10 +1,8 @@
 mod backend;
 
 use backend::{
-    Fetcher, Result,
-    github_fetcher::GitHubFetcher,
-    gitlab_fetcher::GitLabFetcher,
-    settings::{GitType, Setting, settings_from_path, store_settings_to_path},
+    Repo, Result,
+    settings::{Setting, load},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -19,6 +17,7 @@ use tauri::{
 };
 use tokio::task::JoinSet;
 use unit_prefix::NumberPrefix;
+use uuid::Uuid;
 
 const TRAY_ID: &str = "tray";
 const WINDOW_ID: &str = "main";
@@ -30,32 +29,21 @@ pub struct Fetched {
     stars: u32,
     setting: Setting,
 }
-
 #[tauri::command]
-async fn fetch(which: Setting) -> Result<(String, u32)> {
-    let fetcher: Box<dyn Fetcher + Send> = match which.git_type() {
-        GitType::GitHub => Box::new(
-            GitHubFetcher::builder()
-                .owner(which.owner())
-                .repo(which.repo())
-                .build(),
-        ),
-        GitType::GitLab => Box::new(
-            GitLabFetcher::builder()
-                .owner(which.owner())
-                .repo(which.repo())
-                .build(),
-        ),
-    };
-    let project = fetcher.project();
-    let stars = fetcher.stars().await?;
+fn uuid() -> String {
+    Uuid::new_v4().to_string()
+}
+#[tauri::command]
+async fn fetch(which: Repo) -> Result<(String, u32)> {
+    let stars = which.fetch().await?;
+    let project = which.to_string();
     Ok((project, stars))
 }
 
 #[tauri::command]
-async fn set_current(app: AppHandle, setting: Setting) -> Result<()> {
-    let repo = setting.repo().clone();
-    let (_, stars) = fetch(setting).await?;
+async fn set_toolbar(app: AppHandle, repo: Repo) -> Result<()> {
+    let project = repo.to_string();
+    let (_, stars) = fetch(repo).await?;
 
     let stars = match NumberPrefix::decimal(stars as f64) {
         NumberPrefix::Prefixed(prefix, n) => {
@@ -64,21 +52,17 @@ async fn set_current(app: AppHandle, setting: Setting) -> Result<()> {
         _ => format!("{stars}"),
     };
 
-    let txt = format!("⭐️ {repo} {stars}");
+    let txt = format!("⭐️ {project} {stars}");
     let _ = app.tray_by_id(TRAY_ID).unwrap().set_title(Some(txt));
     Ok(())
 }
 
 #[tauri::command]
 async fn create(app: AppHandle, setting: Setting) -> Result<u32> {
-    SETTINGS
-        .get()
-        .unwrap()
-        .write()
-        .unwrap()
-        .insert(setting.clone());
+    let repo = setting.repo().clone();
+    SETTINGS.get().unwrap().write().unwrap().insert(setting);
     store(app).await?;
-    fetch(setting).await.map(|(_, stars)| stars)
+    fetch(repo).await.map(|(_, stars)| stars)
 }
 
 #[tauri::command]
@@ -98,16 +82,16 @@ async fn delete(app: AppHandle, setting: Setting) -> Result<()> {
 #[tauri::command]
 async fn read(app: AppHandle) -> Vec<Result<Fetched, String>> {
     if SETTINGS.get().is_none() {
-        let data = settings_from_path(&settings_file_path(&app))
-            .await
-            .unwrap_or_default();
+        let data = load(&settings_file_path(&app)).await.unwrap_or_default();
         let _ = SETTINGS.set(RwLock::new(data));
     }
     let data = SETTINGS.get().unwrap().read().unwrap().clone();
     let mut set = JoinSet::new();
     data.into_iter().for_each(|setting| {
         set.spawn(async move {
-            let (_, stars) = fetch(setting.clone())
+            let stars = setting
+                .repo()
+                .fetch()
                 .await
                 .map_err(|err| err.to_string())?;
             Ok(Fetched { stars, setting })
@@ -126,7 +110,8 @@ pub fn run() {
         })
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            set_current,
+            set_toolbar,
+            uuid,
             read,
             fetch,
             create,
@@ -173,5 +158,5 @@ fn settings_file_path(app: &AppHandle) -> PathBuf {
 
 async fn store(app: AppHandle) -> Result<()> {
     let settings = SETTINGS.get().unwrap().read().unwrap().clone();
-    store_settings_to_path(&settings, &settings_file_path(&app)).await
+    backend::settings::store(&settings, &settings_file_path(&app)).await
 }

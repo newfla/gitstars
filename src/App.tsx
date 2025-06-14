@@ -13,43 +13,56 @@ interface Error {
 
 type Result<T> = Ok<T> | Error
 
-enum GitType{
+enum GitType {
   GitHub = "GitHub",
   GitLab = "GitLab",
 }
 
-interface Setting {
+interface Repo {
   git_type: GitType,
   owner: String,
-  repo: String,
+  project: String,
+}
+
+interface Setting {
+  id: string,
   order: number,
+  repo: Repo,
 }
 
 interface Fetched {
   setting: Setting,
   stars: number,
 }
- 
+
 // First time load data
 const data: Result<Fetched>[] = await invoke("read");
+console.log(data)
 
 function App() {
   const [greetMsg, setGreetMsg] = useState(0);
   const [owner, setOwner] = useState("");
-  const [repo, setRepo] = useState("");
+  const [project, setProject] = useState("");
 
   const [settings, setSettings] = useState(data);
 
   async function add() {
+    let id: string = await invoke("uuid");
     // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    let setting: Setting = {
+    let repo: Repo = {
       git_type: GitType.GitHub,
       owner: owner,
+      project: project,
+    };
+
+    let setting: Setting = {
       repo: repo,
-      order: 0
-    }
+      order: 0,
+      id: id,
+    };
+
     setGreetMsg(await invoke("create", { setting }));
-    await invoke("set_current", { setting });
+    await invoke("set_toolbar", { repo });
   }
 
   return (
@@ -83,7 +96,7 @@ function App() {
         />
         <input
           id="repo-input"
-          onChange={(e) => setRepo(e.currentTarget.value)}
+          onChange={(e) => setProject(e.currentTarget.value)}
           placeholder="Enter a repo..."
         />
         <button type="submit">Greet</button>
