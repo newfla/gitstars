@@ -1,16 +1,16 @@
-use crate::backend::{GitType, Repo, Result};
+use crate::backend::{GitProvider, Repo, Result};
 use bon::builder;
 
 #[builder]
 pub async fn fetcher(repo: &Repo) -> Result<u32> {
-    if repo.git_type != GitType::GitHub {
+    if repo.git_type != GitProvider::GitHub {
         return Err(super::Error::Wrongfetcher(
             repo.git_type.clone(),
-            GitType::GitHub,
+            GitProvider::GitHub,
         ));
     }
     let client = octocrab::instance();
-    let repo = client.repos(&repo.owner, &repo.project).get().await?;
+    let repo = client.repos(&repo.owner, &repo.name).get().await?;
     Ok(repo.stargazers_count.unwrap_or_default())
 }
 
@@ -20,9 +20,9 @@ mod test {
         use crate::backend::{Repo, github_fetcher::fetcher};
 
         let repo = Repo::builder()
-            .git_type(crate::backend::GitType::GitHub)
+            .git_type(crate::backend::GitProvider::GitHub)
             .owner("newfla")
-            .project("diffusion-rs")
+            .name("diffusion-rs")
             .build();
         let stars = fetcher().repo(&repo).call().await;
         assert_eq!(repo.to_string(), "newfla/diffusion-rs");

@@ -2,16 +2,18 @@ use std::{collections::HashSet, hash::Hash, path::Path};
 
 use crate::backend::{Error, Repo, Result};
 use bon::Builder;
-use getset::Getters;
+use getset::{Getters, Setters};
 use serde::{Deserialize, Serialize};
 use tokio::fs::{create_dir_all, read_to_string, write};
 use uuid::Uuid;
 
-#[derive(Builder, Clone, Debug, Eq, Getters, Serialize, Deserialize)]
+#[derive(Builder, Clone, Debug, Eq, Getters, Serialize, Setters, Deserialize)]
 #[get = "pub"]
 pub struct Setting {
     id: Uuid,
     order: usize,
+    #[getset(set = "pub")]
+    favourite: bool,
     repo: Repo,
 }
 
@@ -70,19 +72,21 @@ mod test {
             {
                 "repo": {
                     "owner": "newfla",
-                    "project": "diffusion-rs",
+                    "name": "diffusion-rs",
                     "git_type": "GitHub"
                 },
                 "order": 1,
+                "favourite": true,
                 "id": "3d69bebb-a800-4e6f-b318-1638a27b66c0"
             },
             {
                 "repo": {
                     "owner": "gitlab-org",
-                    "project": "gitlab",
+                    "name": "gitlab",
                     "git_type": "GitLab"
                 },
                 "order": 2,
+                "favourite": false,
                 "id": "e70e6ca2-6e06-4f0c-8509-fea0645af5a1"
             }
             ]"#;
@@ -101,13 +105,13 @@ mod test {
 
         let gitlab_repo = Repo::builder()
             .owner("gitlab-org")
-            .project("gitlab")
-            .git_type(crate::backend::GitType::GitLab)
+            .name("gitlab")
+            .git_type(crate::backend::GitProvider::GitLab)
             .build();
         let github_repo = Repo::builder()
             .owner("newfla")
-            .project("diffusion-rs")
-            .git_type(crate::backend::GitType::GitHub)
+            .name("diffusion-rs")
+            .git_type(crate::backend::GitProvider::GitHub)
             .build();
         let mut data = Vec::new();
         data.push(
@@ -115,6 +119,7 @@ mod test {
                 .order(2)
                 .id(Uuid::parse_str("e70e6ca2-6e06-4f0c-8509-fea0645af5a1").unwrap())
                 .repo(gitlab_repo)
+                .favourite(false)
                 .build(),
         );
         data.push(
@@ -122,6 +127,7 @@ mod test {
                 .order(1)
                 .id(Uuid::parse_str("3d69bebb-a800-4e6f-b318-1638a27b66c0").unwrap())
                 .repo(github_repo)
+                .favourite(true)
                 .build(),
         );
 

@@ -14,7 +14,7 @@ use thiserror::Error;
 use tokio::io;
 
 #[derive(Clone, Debug, Display, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub enum GitType {
+pub enum GitProvider {
     GitHub,
     GitLab,
 }
@@ -22,24 +22,24 @@ pub enum GitType {
 #[derive(Builder, Clone, Debug, Eq, PartialEq, Getters, Serialize, Deserialize)]
 #[get = "pub"]
 pub struct Repo {
-    git_type: GitType,
+    git_type: GitProvider,
     #[builder(into)]
     owner: String,
     #[builder(into)]
-    project: String,
+    name: String,
 }
 
 impl Display for Repo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}/{}", self.owner, self.project)
+        write!(f, "{}/{}", self.owner, self.name)
     }
 }
 
 impl Repo {
     pub async fn fetch(&self) -> Result<u32> {
         match self.git_type() {
-            GitType::GitHub => github_fetcher::fetcher().repo(self).call().await,
-            GitType::GitLab => gitlab_fetcher::fetcher().repo(self).call().await,
+            GitProvider::GitHub => github_fetcher::fetcher().repo(self).call().await,
+            GitProvider::GitLab => gitlab_fetcher::fetcher().repo(self).call().await,
         }
     }
 }
@@ -59,7 +59,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error("Supported host: '{1}'. Get '{0}'")]
-    Wrongfetcher(GitType, GitType),
+    Wrongfetcher(GitProvider, GitProvider),
 }
 
 impl Serialize for Error {
@@ -67,6 +67,6 @@ impl Serialize for Error {
     where
         S: serde::ser::Serializer,
     {
-        serializer.serialize_str(self.to_string().as_ref())
+        serializer.serialize_str(format!("{self}").as_ref())
     }
 }

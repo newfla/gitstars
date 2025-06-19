@@ -1,4 +1,4 @@
-use crate::backend::{GitType, Repo, Result};
+use crate::backend::{GitProvider, Repo, Result};
 use bon::builder;
 use gitlab::{
     GitlabBuilder,
@@ -15,10 +15,10 @@ struct Project {
 
 #[builder]
 pub async fn fetcher(repo: &Repo) -> Result<u32> {
-    if repo.git_type != GitType::GitLab {
+    if repo.git_type != GitProvider::GitLab {
         return Err(super::Error::Wrongfetcher(
             repo.git_type.clone(),
-            GitType::GitLab,
+            GitProvider::GitLab,
         ));
     }
 
@@ -40,9 +40,9 @@ mod test {
         use crate::backend::{Repo, gitlab_fetcher::fetcher};
 
         let repo = Repo::builder()
-            .git_type(crate::backend::GitType::GitLab)
+            .git_type(crate::backend::GitProvider::GitLab)
             .owner("gitlab-org")
-            .project("gitlab")
+            .name("gitlab")
             .build();
         let stars = fetcher().repo(&repo).call().await;
         assert_eq!(repo.to_string(), "gitlab-org/gitlab");
