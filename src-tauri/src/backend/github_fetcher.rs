@@ -4,7 +4,7 @@ use bon::builder;
 #[builder]
 pub async fn fetcher(repo: &Repo) -> Result<u32> {
     if repo.git_type != GitProvider::GitHub {
-        return Err(super::Error::Wrongfetcher(
+        return Err(super::Error::WrongFetcher(
             repo.git_type.clone(),
             GitProvider::GitHub,
         ));

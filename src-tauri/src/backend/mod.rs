@@ -59,7 +59,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error("Supported host: '{1}'. Get '{0}'")]
-    Wrongfetcher(GitProvider, GitProvider),
+    WrongFetcher(GitProvider, GitProvider),
 }
 
 impl Serialize for Error {

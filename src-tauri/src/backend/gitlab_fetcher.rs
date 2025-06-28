@@ -16,7 +16,7 @@ struct Project {
 #[builder]
 pub async fn fetcher(repo: &Repo) -> Result<u32> {
     if repo.git_type != GitProvider::GitLab {
-        return Err(super::Error::Wrongfetcher(
+        return Err(super::Error::WrongFetcher(
             repo.git_type.clone(),
             GitProvider::GitLab,
         ));

@@ -83,9 +83,12 @@ export default function RepoList() {
   const getLogo = (provider: GitProvider) => {
     switch (provider) {
       case GitProvider.GitHub:
-        return <FaGithub className="w-6 h-6 text-gray-500" />;
+        return <div>
+          <FaGithub className="size-10 rounded-box" />
+        </div>
+          ;
       case GitProvider.GitLab:
-        return <FaGitlab className="w-6 h-6 text-gray-500" />;
+        return <div><FaGitlab className="size-10 rounded-box" /></div>;
       default:
         return null;
     }
@@ -94,14 +97,15 @@ export default function RepoList() {
   const getStarsIcon = (stars: number) => {
     return (
       <div className="flex items-center">
-        {stars} <FaStar />
+        <div>{stars}  </div>
+        <div><FaStar className="size-5 rounded-box" /></div>
       </div>
     );
   };
 
   const getFavouriteIcon = (which: Fetched) => {
     return (
-      <button className="flex items-center"
+      <button className="btn btn-square btn-ghost"
         onClick={async () => { await modFavourite(which.setting) }}>
         {which.setting.favourite ? <FaHeart /> : <FaRegHeart />}
       </button>
@@ -145,18 +149,18 @@ export default function RepoList() {
             <button className="btn btn-xs sm:btn-sm md:btn-md lg:btn-lg xl:btn-xl btn-primary join-item" onClick={addRepo}>Add</button>
           </div>
         </fieldset>
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <ul className="list bg-base-100 rounded-box shadow-md">
           {repos.map((repo, index) => (
-            <div key={index} className="flex items-center justify-between mb-4 border-b pb-4">
-              <div className="flex items-center gap-4">
-                {getLogo(repo.setting.repo.git_type)}
-                <span className="font-medium">{repo.setting.repo.owner}/{repo.setting.repo.name}</span>
+            <li className="list-row" key={index}>
+              {getLogo(repo.setting.repo.git_type)}
+              <div>
+                <div>{repo.setting.repo.owner}/{repo.setting.repo.name}</div>
               </div>
               {getStarsIcon(repo.stars)}
               {getFavouriteIcon(repo)}
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
     </div>
   );
