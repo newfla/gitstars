@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FaGithub, FaGitlab, FaHeart, FaRegHeart, FaStar } from 'react-icons/fa';
 import { invoke } from "@tauri-apps/api/core";
+import "./App.css";
 
 interface Ok<T> {
   Ok: T,
@@ -34,8 +35,6 @@ interface Fetched {
   setting: Setting,
   stars: number,
 }
-
-declare function assert(value: unknown): asserts value;
 
 //Init data 
 const read: Result<Fetched>[] = await invoke("read");
@@ -111,8 +110,8 @@ export default function RepoList() {
 
   const modFavourite = async function (which: Setting) {
     which.favourite = !which.favourite
-    var new_repos = [...repos]
-    for (var f of new_repos) {
+    const new_repos = [...repos]
+    for (const f of new_repos) {
       if (f.setting.id === which.id) {
         f.setting.favourite = which.favourite
         await invoke("update", { "setting": which })
@@ -124,49 +123,28 @@ export default function RepoList() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Repositories</h1>
 
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex gap-4 mb-4">
-            <select
+    <div className="min-h-screen p-8">
+      <div className="max-w-2xl mx-auto">
+        <fieldset className="fieldset bg-base-200 border-base-300 rounded-box w-xs border p-4">
+          <legend className="fieldset-legend">New repo</legend>
+          <div className="join">
+            <select className="select join-item"
               value={repoSelectedProvider}
               onChange={(e) => setRepoSelectedProvider(GitProvider[e.target.value as keyof typeof GitProvider])}
-              className="px-4 py-2 border rounded-lg"
             >
-              {Object.values(GitProvider).map((provider) => (
-                <option key={provider} value={provider}>
-                  {provider.charAt(0).toUpperCase() + provider.slice(1)}
-                </option>
-              ))}
+              {Object.values(GitProvider).map((provider, i) => <option value={provider} key={i}>{provider} </option>)}
             </select>
-
-            <input
-              type="text"
-              value={repoOwner}
+            <input type="text" className="input join-item" value={repoOwner}
               onChange={(e) => setRepoOwner(e.target.value)}
-              placeholder="owner"
-              className="px-4 py-2 border rounded-lg flex-grow"
-            />
-            /
-            <input
-              type="text"
-              value={repoName}
+              placeholder="owner" />
+            <label className="input join-item">/</label>
+            <input type="text" className="input join-item" value={repoName}
               onChange={(e) => setRepoName(e.target.value)}
-              placeholder="name"
-              className="px-4 py-2 border rounded-lg flex-grow"
-            />
-
-            <button
-              onClick={addRepo}
-              className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              Add Repo
-            </button>
+              placeholder="name" />
+            <button className="btn btn-xs sm:btn-sm md:btn-md lg:btn-lg xl:btn-xl btn-primary join-item" onClick={addRepo}>Add</button>
           </div>
-        </div>
-
+        </fieldset>
         <div className="bg-white rounded-lg shadow-md p-6">
           {repos.map((repo, index) => (
             <div key={index} className="flex items-center justify-between mb-4 border-b pb-4">
