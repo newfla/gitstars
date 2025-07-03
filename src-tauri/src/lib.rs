@@ -14,6 +14,7 @@ use tauri::{
     App, AppHandle, Manager,
     menu::Menu,
     tray::{TrayIconBuilder, TrayIconEvent},
+    utils::platform::{Target, target_triple},
 };
 use tokio::task::JoinSet;
 use unit_prefix::NumberPrefix;
@@ -110,8 +111,11 @@ async fn read(app: AppHandle) -> Vec<Result<Fetched>> {
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            build_tray(app)?;
-            //hide_window(app);
+            if Target::from_triple(&target_triple()?) == Target::MacOS {
+                build_tray(app)?;
+                hide_window(app);
+            }
+
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
@@ -127,18 +131,21 @@ async fn fetch(which: &Repo) -> Result<(String, u32)> {
 }
 
 async fn set_toolbar(app: &AppHandle, repo: &Repo) -> Result<()> {
-    let project = repo.name();
-    let (_, stars) = fetch(repo).await?;
+    if let Ok(Target::MacOS) = target_triple().map(|target| Target::from_triple(&target)) {
+        let project = repo.name();
+        let (_, stars) = fetch(repo).await?;
 
-    let stars = match NumberPrefix::decimal(stars as f64) {
-        NumberPrefix::Prefixed(prefix, n) => {
-            format!("{:.0}{}", n, prefix)
-        }
-        _ => format!("{stars}"),
-    };
+        let stars = match NumberPrefix::decimal(stars as f64) {
+            NumberPrefix::Prefixed(prefix, n) => {
+                format!("{n:.0}{prefix}")
+            }
+            _ => format!("{stars}"),
+        };
 
-    let txt = format!("⭐️ {project} {stars}");
-    let _ = app.tray_by_id(TRAY_ID).unwrap().set_title(Some(txt));
+        let txt = format!("⭐️ {project} {stars}");
+        let _ = app.tray_by_id(TRAY_ID).unwrap().set_title(Some(txt));
+    }
+
     Ok(())
 }
 
