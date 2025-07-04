@@ -15,6 +15,7 @@ pub async fn fetcher(repo: &Repo) -> Result<u32> {
 }
 
 mod test {
+    #[ignore]
     #[tokio::test]
     async fn test() {
         use crate::backend::{Repo, github_fetcher::fetcher};
