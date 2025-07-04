@@ -4,4 +4,3 @@
 fn main() {
     gitstars_lib::run()
 }
-

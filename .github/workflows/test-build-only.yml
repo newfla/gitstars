@@ -28,6 +28,11 @@ jobs:
         with:
           node-version: lts/*
 
+      - name: setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -51,3 +56,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: ${{ matrix.args }}
+
+      - name: run Rust test suite
+        run: cargo test --manifest-path=src-tauri/Cargo.toml
