@@ -33,6 +33,6 @@ thiserror = "2.0.12"
 tokio = {version = "1.46.1", features = ["full"] }
 getset = "0.1.6"
 unit-prefix = "0.5.1"
-strum_macros = "0.27.1"
+strum_macros = "0.27.2"
 uuid = {version = "1.17.0", features = ["v4"] }
 
