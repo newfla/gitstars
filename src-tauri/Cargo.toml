@@ -27,7 +27,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 bon = "3.7.1"
-gitlab = "0.1802.0"
+gitlab = "0.1802.1"
 octocrab = "0.44.1"
 thiserror = "2.0.16"
 tokio = {version = "1.47.1", features = ["full"] }
