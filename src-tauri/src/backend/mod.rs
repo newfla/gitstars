@@ -5,7 +5,6 @@ pub mod settings;
 use std::fmt::Display;
 
 use bon::Builder;
-use bon::builder;
 use getset::Getters;
 use gitlab::RestError;
 use serde::{Deserialize, Serialize};

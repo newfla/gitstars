@@ -11,9 +11,9 @@ use std::{
     sync::{OnceLock, RwLock},
 };
 use tauri::{
-    App, AppHandle, Manager,
-    menu::Menu,
-    tray::{TrayIconBuilder, TrayIconEvent},
+    App, AppHandle, Emitter, Manager,
+    menu::MenuBuilder,
+    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     utils::platform::{Target, target_triple},
 };
 use tokio::task::JoinSet;
@@ -113,7 +113,7 @@ pub fn run() {
         .setup(|app| {
             if Target::from_triple(&target_triple()?) == Target::MacOS {
                 build_tray(app)?;
-                hide_window(app);
+                hide_window(app.app_handle());
             }
 
             Ok(())
@@ -150,16 +150,23 @@ async fn set_toolbar(app: &AppHandle, repo: &Repo) -> Result<()> {
 }
 
 fn build_tray(app: &mut App) -> Result<(), tauri::Error> {
-    let menu = Menu::new(app)?;
+    let menu = MenuBuilder::new(app)
+        .text("open", "Open")
+        .text("refresh", "Refresh")
+        .text("exit", "Exit")
+        .build()?;
     TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
-        .show_menu_on_left_click(true)
+        .show_menu_on_left_click(false)
         .title(format!(
             "⭐️ {}",
             app.config().product_name.as_ref().unwrap()
         ))
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { .. } = event {
+            if let TrayIconEvent::Click { button, .. } = event {
+                if button != MouseButton::Left {
+                    return;
+                }
                 let app = tray.app_handle();
                 if let Some(window) = app.get_webview_window(WINDOW_ID) {
                     let _ = window.show();
@@ -167,11 +174,30 @@ fn build_tray(app: &mut App) -> Result<(), tauri::Error> {
                 }
             }
         })
+        .on_menu_event(|app_handle, event| match event.id().0.as_str() {
+            "open" => open_window(app_handle),
+            "exit" => quit_app(app_handle),
+            "refresh" => {
+                let _ = app_handle.emit("refresh", ());
+            }
+            _ => {}
+        })
         .build(app)?;
     Ok(())
 }
 
-fn hide_window(app: &mut App) {
+fn quit_app(app: &AppHandle) {
+    app.exit(0);
+}
+
+fn open_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(WINDOW_ID) {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn hide_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(WINDOW_ID) {
         let _ = window.hide();
     }
