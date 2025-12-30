@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FaGithubSquare, FaHeart, FaRegHeart, FaStar } from 'react-icons/fa';
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from '@tauri-apps/api/event';
 import "./App.css";
 import { FiRefreshCw } from 'react-icons/fi';
 import { FaSquareGitlab } from 'react-icons/fa6';
@@ -46,6 +47,7 @@ async function init_data(): Promise<Fetched[]> {
 }
 
 const data: Fetched[] = await init_data()
+await listen('refresh', async () => {await init_data()});
 
 export default function RepoList() {
 
