@@ -1,7 +1,7 @@
 {
   "name": "gitstars",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,8 +14,8 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "daisyui": "^5.0.43",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "react-icons": "^5.5.0",
     "tailwindcss": "^4.1.10"
   },
@@ -23,14 +23,14 @@
     "@eslint/js": "^9.29.0",
     "@tailwindcss/typography": "^0.5.16",
     "@tauri-apps/cli": "^2",
-    "@types/react": "^18.3.1",
+    "@types/react": "^19.1.8",
     "@types/react-dom": "^19.0.1",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^5.0.0",
     "eslint": "^9.29.0",
     "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-hooks": "^6.1.1",
     "globals": "^16.2.0",
-    "typescript": "~5.8.3",
+    "typescript": "~5.9.2",
     "typescript-eslint": "^8.34.1",
     "vite": "^7.0.2"
   }
