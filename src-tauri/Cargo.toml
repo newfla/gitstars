@@ -28,7 +28,7 @@ serde_json = "1"
 
 bon = "3.9.1"
 gitlab = "0.1811.0"
-octocrab = "0.50.0"
+octocrab = "0.51.0"
 thiserror = "2.0.18"
 tokio = { version = "1.51.1", features = ["full"] }
 getset = "0.1.6"
